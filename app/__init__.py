@@ -1,0 +1,1 @@
+"""PizzBurg Order Bridge application."""
