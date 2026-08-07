@@ -48,6 +48,23 @@ cp .env.example .env
 
 Для этого варианта PostgreSQL должен быть доступен по `BRIDGE_DATABASE_URL`.
 
+## Railway
+
+В сервисе приложения задайте переменные:
+
+```text
+BRIDGE_ENVIRONMENT=production
+BRIDGE_DATABASE_URL=${{Postgres.DATABASE_URL}}
+BRIDGE_OAUTH_CLIENT_ID=<сгенерированный Client ID>
+BRIDGE_OAUTH_CLIENT_SECRET=<сгенерированный секрет>
+BRIDGE_JWT_SECRET=<отдельный случайный секрет не короче 32 байт>
+```
+
+Имена ссылок чувствительны к названию сервиса базы данных: пример предполагает, что он
+называется `Postgres`. Контейнер автоматически выполняет `alembic upgrade head` перед запуском
+API. После успешного deployment создайте публичный домен в `Settings → Networking` и проверьте
+`https://<domain>/health`.
+
 ## Тесты и стиль
 
 ```bash

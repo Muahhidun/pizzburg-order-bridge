@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import SecretStr, model_validator
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -25,6 +25,15 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_audience: str = "pizzburg-order-bridge"
     jwt_issuer: str = "pizzburg-order-bridge"
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def use_async_postgres_driver(cls, value: str) -> str:
+        if value.startswith("postgres://"):
+            return value.replace("postgres://", "postgresql+asyncpg://", 1)
+        if value.startswith("postgresql://"):
+            return value.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return value
 
     @model_validator(mode="after")
     def reject_placeholder_production_secrets(self) -> "Settings":
