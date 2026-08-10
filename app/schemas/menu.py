@@ -17,7 +17,7 @@ class MenuItem(BaseModel):
     id: str = Field(max_length=64)
     category_id: str = Field(alias="categoryId", max_length=64)
     name: str
-    description: str
+    description: str | None = None
     price: float = Field(gt=0)
     measure: int = Field(gt=0)
     measure_unit: Literal["г", "мл", "g", "ml"] = Field(alias="measureUnit")

@@ -1,8 +1,12 @@
-from fastapi import APIRouter, Depends
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
+from app.adapters.poster import PosterAPIError
 from app.api.dependencies import require_access_token
-from app.schemas.menu import MenuCategory, MenuComposition, MenuItem
+from app.schemas.menu import MenuComposition
+from app.services.poster_menu import PosterMenuService, PosterNotConfiguredError
 
 MENU_CONTENT_TYPE = "application/vnd.eats.menu.composition.v2+json"
 
@@ -12,6 +16,10 @@ class YandexMenuResponse(JSONResponse):
 
 
 router = APIRouter(tags=["menu"], dependencies=[Depends(require_access_token)])
+
+
+def get_poster_menu_service(request: Request) -> PosterMenuService:
+    return request.app.state.poster_menu_service
 
 
 @router.get(
@@ -32,6 +40,7 @@ router = APIRouter(tags=["menu"], dependencies=[Depends(require_access_token)])
 )
 async def get_menu_composition(
     restaurant_id: str,
+    menu_service: Annotated[PosterMenuService, Depends(get_poster_menu_service)],
 ) -> MenuComposition | JSONResponse:
     if restaurant_id != "pizzburg-main":
         return JSONResponse(
@@ -39,35 +48,15 @@ async def get_menu_composition(
             content=[{"code": 404, "description": "Restaurant not found"}],
         )
 
-    return MenuComposition(
-        categories=[
-            MenuCategory(
-                id="test-pizzas",
-                name="Тестовые пиццы",
-                sort_order=10,
-            )
-        ],
-        items=[
-            MenuItem(
-                id="test-pizza-margherita",
-                category_id="test-pizzas",
-                name="[ТЕСТ] Пицца Маргарита",
-                description="Тестовая позиция для проверки интеграции Яндекс Еды",
-                price=2500.0,
-                measure=500,
-                measure_unit="g",
-                sort_order=10,
-            ),
-            MenuItem(
-                id="test-pizza-pepperoni",
-                category_id="test-pizzas",
-                name="[ТЕСТ] Пицца Пепперони",
-                description="Тестовая позиция для проверки интеграции Яндекс Еды",
-                price=3000.0,
-                measure=550,
-                measure_unit="g",
-                sort_order=20,
-            ),
-        ],
-        last_change="2026-08-10T16:00:00.000000+05:00",
-    )
+    try:
+        return await menu_service.get_menu()
+    except PosterNotConfiguredError:
+        return JSONResponse(
+            status_code=503,
+            content=[{"code": 503, "description": "Poster integration is not configured"}],
+        )
+    except PosterAPIError:
+        return JSONResponse(
+            status_code=502,
+            content=[{"code": 502, "description": "Poster menu is temporarily unavailable"}],
+        )

@@ -26,6 +26,13 @@ class Settings(BaseSettings):
     jwt_audience: str = "pizzburg-order-bridge"
     jwt_issuer: str = "pizzburg-order-bridge"
 
+    poster_main_token: SecretStr | None = None
+    poster_api_url: str = "https://joinposter.com/api"
+    poster_menu_category_id: str = "3"
+    poster_main_spot_id: str = "1"
+    poster_request_timeout_seconds: float = 10.0
+    poster_menu_cache_seconds: int = 300
+
     @field_validator("database_url", mode="before")
     @classmethod
     def use_async_postgres_driver(cls, value: str) -> str:
