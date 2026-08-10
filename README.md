@@ -19,12 +19,17 @@ API первого этапа:
 GET  /health
 POST /security/oauth/token
 GET  /restaurants
+GET  /menu/{restaurant_id}/composition
 POST /order
 GET  /order/{order_id}
 GET  /order/{order_id}/status
 ```
 
 `/health` открыт для Railway health check. Остальные бизнес-маршруты требуют Bearer JWT.
+
+Тестовое меню соответствует контракту Яндекс Еды
+`application/vnd.eats.menu.composition.v2+json` и пока содержит только две позиции с префиксом
+`[ТЕСТ]`. Они предназначены для проверки парсинга и не связаны с рабочим меню Poster.
 
 ## Локальный запуск в Docker
 

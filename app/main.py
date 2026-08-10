@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api.routes import health, oauth, orders, restaurants
+from app.api.routes import health, menu, oauth, orders, restaurants
 from app.core.config import Settings, get_settings
 from app.db.base import Base
 from app.db.session import build_engine, build_session_factory
@@ -23,7 +23,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     application = FastAPI(
         title=resolved_settings.app_name,
-        version="0.1.0",
+        version="0.2.0",
         description="Dry-run order intake bridge for delivery aggregators.",
         lifespan=lifespan,
     )
@@ -34,6 +34,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(health.router)
     application.include_router(oauth.router)
     application.include_router(restaurants.router)
+    application.include_router(menu.router)
     application.include_router(orders.router)
     return application
 
