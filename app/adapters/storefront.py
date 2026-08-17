@@ -80,13 +80,21 @@ class StorefrontClient:
         self._timeout_seconds = timeout_seconds
 
     async def get_product_photos(self) -> dict[str, str]:
+        urls = [self._url]
+        urls.extend(urljoin(self._url, page) for page in STOREFRONT_PRODUCT_PAGES.values())
         async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
-            requests = [client.get(self._url)]
-            requests.extend(
-                client.get(urljoin(self._url, page))
-                for page in STOREFRONT_PRODUCT_PAGES.values()
+            responses = await asyncio.gather(
+                *(client.get(url) for url in urls),
+                return_exceptions=True,
             )
-            responses = await asyncio.gather(*requests, return_exceptions=True)
+            for index, response in enumerate(responses):
+                if isinstance(response, httpx.Response) and response.is_success:
+                    continue
+                await asyncio.sleep(0.25)
+                try:
+                    responses[index] = await client.get(urls[index])
+                except httpx.HTTPError:
+                    pass
 
         photos: dict[str, str] = {}
         homepage = responses[0]
