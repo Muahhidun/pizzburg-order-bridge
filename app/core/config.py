@@ -30,8 +30,10 @@ class Settings(BaseSettings):
     poster_api_url: str = "https://joinposter.com/api"
     poster_menu_category_id: str = "3"
     poster_main_spot_id: str = "1"
+    poster_menu_price_source: str = "Wolt"
     poster_request_timeout_seconds: float = 10.0
     poster_menu_cache_seconds: int = 300
+    storefront_menu_url: str = "https://pizzburg.kz/"
 
     @field_validator("database_url", mode="before")
     @classmethod

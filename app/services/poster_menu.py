@@ -6,9 +6,14 @@ from time import monotonic
 from typing import Any
 
 from app.adapters.poster import PosterAPIError, PosterClient
+from app.adapters.storefront import StorefrontClient, storefront_photo_keys
 from app.core.config import Settings
 from app.schemas.menu import MenuCategory, MenuComposition, MenuItem, MenuItemImage
-from app.services.pizza_metadata import PIZZA_DESCRIPTIONS
+from app.services.menu_metadata import (
+    EXCLUDED_PRODUCT_IDS,
+    menu_description,
+    menu_measure,
+)
 
 
 class PosterNotConfiguredError(Exception):
@@ -29,7 +34,22 @@ def _integer(value: Any, default: int = 0) -> int:
         return default
 
 
-def _item_price(product: dict[str, Any], spot_id: str) -> float:
+def _source(product: dict[str, Any], source_name: str) -> dict[str, Any] | None:
+    return next(
+        (
+            source
+            for source in product.get("sources") or []
+            if str(source.get("name") or "").casefold() == source_name.casefold()
+        ),
+        None,
+    )
+
+
+def _item_price(product: dict[str, Any], spot_id: str, source_name: str) -> float:
+    source = _source(product, source_name)
+    if source is not None:
+        return _number(source.get("price")) / 100
+
     spots = product.get("spots")
     if isinstance(spots, list):
         spot = next(
@@ -48,8 +68,11 @@ def _item_price(product: dict[str, Any], spot_id: str) -> float:
     return 0
 
 
-def _is_visible(product: dict[str, Any], spot_id: str) -> bool:
+def _is_visible(product: dict[str, Any], spot_id: str, source_name: str) -> bool:
     if str(product.get("hidden", "0")) == "1":
+        return False
+    source = _source(product, source_name)
+    if source is None or str(source.get("visible", "1")) == "0":
         return False
     spots = product.get("spots")
     if not isinstance(spots, list):
@@ -82,9 +105,18 @@ def _photo_url(poster_photo: Any) -> str | None:
 
 
 class PosterMenuService:
-    def __init__(self, settings: Settings, client: PosterClient | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        client: PosterClient | None = None,
+        storefront_client: StorefrontClient | None = None,
+    ) -> None:
         self._settings = settings
         self._client = client
+        self._storefront_client = storefront_client or StorefrontClient(
+            settings.storefront_menu_url,
+            timeout_seconds=settings.poster_request_timeout_seconds,
+        )
         self._cached_menu: MenuComposition | None = None
         self._cached_until = 0.0
         self._signature: str | None = None
@@ -118,65 +150,95 @@ class PosterMenuService:
 
     async def _load_menu(self) -> MenuComposition:
         client = self._poster_client()
-        categories, products = await asyncio.gather(
+        categories, products, storefront_photos = await asyncio.gather(
             client.get_categories(),
             client.get_products(),
+            self._storefront_client.get_product_photos(),
         )
 
-        category_id = self._settings.poster_menu_category_id
-        category = next(
-            (
-                item
-                for item in categories
-                if str(item.get("category_id")) == category_id
-                and str(item.get("category_hidden", "0")) != "1"
-            ),
-            None,
+        active_categories = sorted(
+            (item for item in categories if str(item.get("category_hidden", "0")) != "1"),
+            key=lambda item: _integer(item.get("sort_order"), 100),
         )
-        if category is None:
-            raise PosterAPIError("Poster pizza category is unavailable")
 
         prepared_items: list[dict[str, Any]] = []
-        for product in products:
-            if str(product.get("menu_category_id")) != category_id:
-                continue
-            if not _is_visible(product, self._settings.poster_main_spot_id):
-                continue
-
-            product_id = str(product.get("product_id", "")).strip()
-            name = str(product.get("product_name", "")).strip()
-            price = _item_price(product, self._settings.poster_main_spot_id)
-            measure = round(_number(product.get("out")))
-            measure_unit = _measure_unit(product.get("unit"))
-            description = PIZZA_DESCRIPTIONS.get(product_id)
-            photo_url = _photo_url(product.get("photo_origin") or product.get("photo"))
-            if (
-                not product_id
-                or not name
-                or price <= 0
-                or measure <= 0
-                or measure_unit is None
-                or description is None
-                or photo_url is None
-            ):
-                continue
-
-            prepared_items.append(
-                {
-                    "id": product_id,
-                    "category_id": category_id,
-                    "name": name,
-                    "description": description,
-                    "price": price,
-                    "measure": measure,
-                    "measure_unit": measure_unit,
-                    "sort_order": _integer(product.get("sort_order"), 100),
-                    "photo_url": photo_url,
-                }
+        menu_categories: list[MenuCategory] = []
+        for category in active_categories:
+            category_id = str(category.get("category_id", "")).strip()
+            category_products = sorted(
+                (
+                    product
+                    for product in products
+                    if str(product.get("menu_category_id")) == category_id
+                ),
+                key=lambda product: _integer(product.get("sort_order"), 100),
             )
+            category_item_count = 0
+            for product in category_products:
+                if not _is_visible(
+                    product,
+                    self._settings.poster_main_spot_id,
+                    self._settings.poster_menu_price_source,
+                ):
+                    continue
+
+                product_id = str(product.get("product_id", "")).strip()
+                if product_id in EXCLUDED_PRODUCT_IDS:
+                    continue
+                name = str(product.get("product_name", "")).strip()
+                price = _item_price(
+                    product,
+                    self._settings.poster_main_spot_id,
+                    self._settings.poster_menu_price_source,
+                )
+                measure = menu_measure(product)
+                description = menu_description(product)
+                photo_url = next(
+                    (
+                        storefront_photos[key]
+                        for key in storefront_photo_keys(product_id, name)
+                        if key in storefront_photos
+                    ),
+                    None,
+                )
+                if photo_url is None:
+                    photo_url = _photo_url(product.get("photo_origin") or product.get("photo"))
+                if (
+                    not product_id
+                    or not name
+                    or price <= 0
+                    or measure is None
+                    or description is None
+                    or photo_url is None
+                ):
+                    continue
+
+                prepared_items.append(
+                    {
+                        "id": product_id,
+                        "category_id": category_id,
+                        "name": name,
+                        "description": description,
+                        "price": price,
+                        "measure": measure[0],
+                        "measure_unit": measure[1],
+                        "sort_order": _integer(product.get("sort_order"), 100),
+                        "photo_url": photo_url,
+                    }
+                )
+                category_item_count += 1
+
+            if category_item_count:
+                menu_categories.append(
+                    MenuCategory(
+                        id=category_id,
+                        name=str(category.get("category_name") or "").strip(),
+                        sort_order=_integer(category.get("sort_order"), 100),
+                    )
+                )
 
         if not prepared_items:
-            raise PosterAPIError("Poster pizza category contains no valid items")
+            raise PosterAPIError("Poster menu contains no valid items")
 
         image_hashes = await client.get_image_hashes([item["photo_url"] for item in prepared_items])
         menu_items = [
@@ -198,17 +260,9 @@ class PosterMenuService:
             )
             for item in prepared_items
         ]
-        menu_items.sort(key=lambda item: (item.sort_order, item.name))
-
-        category_name = str(category.get("category_name") or "Пиццы").strip()
-        category_sort_order = _integer(category.get("sort_order"), 100)
         content = {
             "categories": [
-                {
-                    "id": category_id,
-                    "name": category_name,
-                    "sortOrder": category_sort_order,
-                }
+                category.model_dump(mode="json", by_alias=True) for category in menu_categories
             ],
             "items": [item.model_dump(mode="json", by_alias=True) for item in menu_items],
         }
@@ -220,13 +274,7 @@ class PosterMenuService:
             self._last_change = datetime.now(UTC).isoformat(timespec="microseconds")
 
         return MenuComposition(
-            categories=[
-                MenuCategory(
-                    id=category_id,
-                    name=category_name,
-                    sort_order=category_sort_order,
-                )
-            ],
+            categories=menu_categories,
             items=menu_items,
             last_change=self._last_change,
         )

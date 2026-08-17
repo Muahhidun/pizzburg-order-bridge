@@ -100,6 +100,7 @@ class FakePosterClient:
                 "out": 577,
                 "unit": "kg",
                 "spots": [{"spot_id": "1", "price": "255000", "visible": "1"}],
+                "sources": [{"id": 3, "name": "Wolt", "price": "265000", "visible": 1}],
             },
             {
                 "product_id": "hidden",
@@ -116,9 +117,18 @@ class FakePosterClient:
         return {url: "c" * 40 for url in urls}
 
 
+class FakeStorefrontClient:
+    async def get_product_photos(self):
+        return {}
+
+
 async def test_poster_menu_service_maps_real_poster_fields():
     settings = Settings(poster_menu_category_id="3", poster_main_spot_id="1")
-    service = PosterMenuService(settings, client=FakePosterClient())
+    service = PosterMenuService(
+        settings,
+        client=FakePosterClient(),
+        storefront_client=FakeStorefrontClient(),
+    )
 
     menu = await service.get_menu()
 
@@ -127,8 +137,8 @@ async def test_poster_menu_service_maps_real_poster_fields():
     assert len(menu.items) == 1
     assert menu.items[0].id == "125"
     assert menu.items[0].name == "Маргарита"
-    assert menu.items[0].price == 2550
-    assert menu.items[0].measure == 577
+    assert menu.items[0].price == 2650
+    assert menu.items[0].measure == 525
     assert menu.items[0].measure_unit == "g"
     assert menu.items[0].description is not None
     assert menu.items[0].description.endswith("(30 см)")
