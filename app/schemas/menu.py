@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 
 class MenuCategory(BaseModel):
@@ -9,6 +9,13 @@ class MenuCategory(BaseModel):
     id: str = Field(max_length=64)
     name: str
     sort_order: int = Field(default=100, alias="sortOrder")
+
+
+class MenuItemImage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    hash: str = Field(min_length=40, max_length=40, pattern=r"^[0-9a-f]{40}$")
+    url: HttpUrl
 
 
 class MenuItem(BaseModel):
@@ -23,6 +30,7 @@ class MenuItem(BaseModel):
     measure_unit: Literal["г", "мл", "g", "ml"] = Field(alias="measureUnit")
     is_catchweight: bool = Field(default=False, alias="isCatchweight")
     sort_order: int = Field(default=100, alias="sortOrder")
+    images: list[MenuItemImage] = Field(min_length=1)
 
 
 class MenuComposition(BaseModel):

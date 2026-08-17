@@ -1,6 +1,6 @@
 from app.api.routes.menu import MENU_CONTENT_TYPE
 from app.core.config import Settings
-from app.schemas.menu import MenuCategory, MenuComposition, MenuItem
+from app.schemas.menu import MenuCategory, MenuComposition, MenuItem, MenuItemImage
 from app.services.poster_menu import PosterMenuService
 
 
@@ -16,6 +16,12 @@ async def test_menu_returns_poster_items_in_yandex_format(client, token, monkeyp
                     price=2550,
                     measure=577,
                     measure_unit="g",
+                    images=[
+                        MenuItemImage(
+                            hash="a" * 40,
+                            url="https://joinposter.com/pizza-125.jpg",
+                        )
+                    ],
                 ),
                 MenuItem(
                     id="118",
@@ -24,6 +30,12 @@ async def test_menu_returns_poster_items_in_yandex_format(client, token, monkeyp
                     price=3150,
                     measure=577,
                     measure_unit="g",
+                    images=[
+                        MenuItemImage(
+                            hash="b" * 40,
+                            url="https://joinposter.com/pizza-118.jpg",
+                        )
+                    ],
                 ),
             ],
             last_change="2026-08-10T11:00:00.000000+00:00",
@@ -45,6 +57,7 @@ async def test_menu_returns_poster_items_in_yandex_format(client, token, monkeyp
     assert all(item["categoryId"] == "3" for item in body["items"])
     assert all(item["price"] > 0 for item in body["items"])
     assert all(item["measureUnit"] == "g" for item in body["items"])
+    assert all(len(item["images"]) == 1 for item in body["items"])
 
 
 async def test_menu_requires_authorization(client):
@@ -81,6 +94,7 @@ class FakePosterClient:
                 "product_name": "Маргарита ",
                 "menu_category_id": "3",
                 "product_production_description": "",
+                "photo_origin": "/upload/pizza-125.jpeg",
                 "hidden": "0",
                 "sort_order": "20",
                 "out": 577,
@@ -98,6 +112,9 @@ class FakePosterClient:
             },
         ]
 
+    async def get_image_hashes(self, urls):
+        return {url: "c" * 40 for url in urls}
+
 
 async def test_poster_menu_service_maps_real_poster_fields():
     settings = Settings(poster_menu_category_id="3", poster_main_spot_id="1")
@@ -113,3 +130,25 @@ async def test_poster_menu_service_maps_real_poster_fields():
     assert menu.items[0].price == 2550
     assert menu.items[0].measure == 577
     assert menu.items[0].measure_unit == "g"
+    assert menu.items[0].description is not None
+    assert menu.items[0].description.endswith("(30 см)")
+    assert menu.items[0].images[0].hash == "c" * 40
+    assert str(menu.items[0].images[0].url) == ("https://joinposter.com/upload/pizza-125.jpeg")
+
+
+def test_meat_pizza_description_names_meat_types():
+    from app.services.pizza_metadata import PIZZA_DESCRIPTIONS
+
+    description = PIZZA_DESCRIPTIONS["169"]
+
+    assert "куриная ветчина" in description
+    assert "говяжьи гриль-сосиски" in description
+    assert description.endswith("(30 см)")
+
+
+def test_all_pizza_descriptions_have_composition_and_diameter():
+    from app.services.pizza_metadata import PIZZA_DESCRIPTIONS
+
+    assert len(PIZZA_DESCRIPTIONS) == 18
+    assert all(value.startswith("Состав: ") for value in PIZZA_DESCRIPTIONS.values())
+    assert all(value.endswith("(30 см)") for value in PIZZA_DESCRIPTIONS.values())

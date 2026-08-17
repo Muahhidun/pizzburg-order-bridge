@@ -7,7 +7,8 @@ from typing import Any
 
 from app.adapters.poster import PosterAPIError, PosterClient
 from app.core.config import Settings
-from app.schemas.menu import MenuCategory, MenuComposition, MenuItem
+from app.schemas.menu import MenuCategory, MenuComposition, MenuItem, MenuItemImage
+from app.services.pizza_metadata import PIZZA_DESCRIPTIONS
 
 
 class PosterNotConfiguredError(Exception):
@@ -69,6 +70,17 @@ def _measure_unit(poster_unit: Any) -> str | None:
     return None
 
 
+def _photo_url(poster_photo: Any) -> str | None:
+    value = str(poster_photo or "").strip()
+    if not value:
+        return None
+    if value.startswith("https://"):
+        return value
+    if value.startswith("/"):
+        return f"https://joinposter.com{value}"
+    return None
+
+
 class PosterMenuService:
     def __init__(self, settings: Settings, client: PosterClient | None = None) -> None:
         self._settings = settings
@@ -124,7 +136,7 @@ class PosterMenuService:
         if category is None:
             raise PosterAPIError("Poster pizza category is unavailable")
 
-        menu_items: list[MenuItem] = []
+        prepared_items: list[dict[str, Any]] = []
         for product in products:
             if str(product.get("menu_category_id")) != category_id:
                 continue
@@ -136,25 +148,56 @@ class PosterMenuService:
             price = _item_price(product, self._settings.poster_main_spot_id)
             measure = round(_number(product.get("out")))
             measure_unit = _measure_unit(product.get("unit"))
-            if not product_id or not name or price <= 0 or measure <= 0 or measure_unit is None:
+            description = PIZZA_DESCRIPTIONS.get(product_id)
+            photo_url = _photo_url(product.get("photo_origin") or product.get("photo"))
+            if (
+                not product_id
+                or not name
+                or price <= 0
+                or measure <= 0
+                or measure_unit is None
+                or description is None
+                or photo_url is None
+            ):
                 continue
 
-            description = str(product.get("product_production_description") or "").strip()
-            menu_items.append(
-                MenuItem(
-                    id=product_id,
-                    category_id=category_id,
-                    name=name,
-                    description=description or None,
-                    price=price,
-                    measure=measure,
-                    measure_unit=measure_unit,
-                    sort_order=_integer(product.get("sort_order"), 100),
-                )
+            prepared_items.append(
+                {
+                    "id": product_id,
+                    "category_id": category_id,
+                    "name": name,
+                    "description": description,
+                    "price": price,
+                    "measure": measure,
+                    "measure_unit": measure_unit,
+                    "sort_order": _integer(product.get("sort_order"), 100),
+                    "photo_url": photo_url,
+                }
             )
 
-        if not menu_items:
+        if not prepared_items:
             raise PosterAPIError("Poster pizza category contains no valid items")
+
+        image_hashes = await client.get_image_hashes([item["photo_url"] for item in prepared_items])
+        menu_items = [
+            MenuItem(
+                id=item["id"],
+                category_id=item["category_id"],
+                name=item["name"],
+                description=item["description"],
+                price=item["price"],
+                measure=item["measure"],
+                measure_unit=item["measure_unit"],
+                sort_order=item["sort_order"],
+                images=[
+                    MenuItemImage(
+                        hash=image_hashes[item["photo_url"]],
+                        url=item["photo_url"],
+                    )
+                ],
+            )
+            for item in prepared_items
+        ]
         menu_items.sort(key=lambda item: (item.sort_order, item.name))
 
         category_name = str(category.get("category_name") or "Пиццы").strip()

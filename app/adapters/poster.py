@@ -1,3 +1,5 @@
+import asyncio
+import hashlib
 from typing import Any
 
 import httpx
@@ -42,3 +44,18 @@ class PosterClient:
 
     async def get_products(self) -> list[dict[str, Any]]:
         return await self._call("menu.getProducts")
+
+    async def get_image_hashes(self, urls: list[str]) -> dict[str, str]:
+        async def download(client: httpx.AsyncClient, url: str) -> tuple[str, str]:
+            response = await client.get(url)
+            response.raise_for_status()
+            return url, hashlib.sha1(response.content).hexdigest()
+
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
+                results = await asyncio.gather(
+                    *(download(client, url) for url in dict.fromkeys(urls))
+                )
+        except httpx.HTTPError as exc:
+            raise PosterAPIError("Poster product image request failed") from exc
+        return dict(results)
