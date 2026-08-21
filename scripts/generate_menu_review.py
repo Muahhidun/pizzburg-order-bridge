@@ -13,6 +13,13 @@ def escape_cell(value: str) -> str:
     return value.replace("|", "\\|").replace("\n", " ")
 
 
+def modifier_summary(item) -> str:
+    return "; ".join(
+        f"{group.name}: {' / '.join(modifier.name for modifier in group.modifiers)}"
+        for group in item.modifier_groups
+    )
+
+
 async def main() -> None:
     menu = await PosterMenuService(Settings()).get_menu()
     items_by_category = {
@@ -53,23 +60,26 @@ async def main() -> None:
             [
                 f"## {category.name}",
                 "",
-                "| ID | Позиция | Цена | Размер | Описание | Фото |",
-                "|---:|---|---:|---:|---|---|",
+                "| ID | Позиция | Цена | Размер | Описание | Выбор | Фото |",
+                "|---:|---|---:|---:|---|---|---|",
             ]
         )
         html_lines.extend(
             [
                 f"<h2>{escape_html(category.name)}</h2>",
                 "<table><thead><tr><th>ID</th><th>Позиция</th><th>Цена</th>"
-                "<th>Размер</th><th>Описание</th><th>Фото</th></tr></thead><tbody>",
+                "<th>Размер</th><th>Описание</th><th>Выбор</th>"
+                "<th>Фото</th></tr></thead><tbody>",
             ]
         )
         for item in items_by_category[category.id]:
             image_url = str(item.images[0].url)
             image_source = "Сайт" if "foodpicasso.com" in image_url else "Poster"
             unit = "г" if item.measure_unit == "g" else "мл"
+            modifiers = modifier_summary(item)
             lines.append(
                 "| {id} | {name} | {price:g} ₸ | {measure} {unit} | {description} | "
+                "{modifiers} | "
                 '<img src="{url}" alt="{name}" width="120"><br>[{source}]({url}) |'.format(
                     id=item.id,
                     name=escape_cell(item.name),
@@ -77,6 +87,7 @@ async def main() -> None:
                     measure=item.measure,
                     unit=unit,
                     description=escape_cell(item.description or ""),
+                    modifiers=escape_cell(modifiers),
                     source=image_source,
                     url=image_url,
                 )
@@ -84,6 +95,7 @@ async def main() -> None:
             html_lines.append(
                 "<tr><td class=num>{id}</td><td>{name}</td><td class=num>{price:g} ₸</td>"
                 "<td class=num>{measure} {unit}</td><td>{description}</td>"
+                "<td>{modifiers}</td>"
                 '<td><img src="{url}" alt="{name}" loading="lazy">'
                 '<a class="source" href="{url}">{source}</a></td></tr>'.format(
                     id=escape_html(item.id),
@@ -92,6 +104,7 @@ async def main() -> None:
                     measure=item.measure,
                     unit=unit,
                     description=escape_html(item.description or ""),
+                    modifiers=escape_html(modifiers),
                     source=image_source,
                     url=escape_html(image_url, quote=True),
                 )

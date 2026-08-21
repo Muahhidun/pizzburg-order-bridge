@@ -24,6 +24,7 @@ STOREFRONT_NAME_ALIASES = {
 # active product pages contain the current storefront photo.
 STOREFRONT_PRODUCT_PAGES = {
     "120": "/product/404-donernaya",
+    "141": "/product/437-chikenchiz-supersyrnyy",
     "179": "/product/648-doner-govyajiy-100-halapeno",
     "180": "/product/650-doner-v-batone-govyajiy-halapeno",
     "181": "/product/649-doner-govyajiy-150-halapeno",
@@ -60,9 +61,7 @@ def parse_homepage_photos(page: str) -> dict[str, str]:
         photo_match = re.search(r'data-full="([^"]+)"', photo_tag.group(0))
         if photo_match is None:
             continue
-        photos[normalize_product_name(name_match.group(1))] = html.unescape(
-            photo_match.group(1)
-        )
+        photos[normalize_product_name(name_match.group(1))] = html.unescape(photo_match.group(1))
     return photos
 
 

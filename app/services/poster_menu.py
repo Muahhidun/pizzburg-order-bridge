@@ -10,7 +10,10 @@ from app.adapters.storefront import StorefrontClient, storefront_photo_keys
 from app.core.config import Settings
 from app.schemas.menu import MenuCategory, MenuComposition, MenuItem, MenuItemImage
 from app.services.menu_metadata import (
+    CATEGORY_NAME_OVERRIDES,
     EXCLUDED_PRODUCT_IDS,
+    ITEM_NAME_OVERRIDES,
+    MODIFIER_GROUP_OVERRIDES,
     menu_description,
     menu_measure,
 )
@@ -185,7 +188,8 @@ class PosterMenuService:
                 product_id = str(product.get("product_id", "")).strip()
                 if product_id in EXCLUDED_PRODUCT_IDS:
                     continue
-                name = str(product.get("product_name", "")).strip()
+                poster_name = str(product.get("product_name", "")).strip()
+                name = ITEM_NAME_OVERRIDES.get(product_id, poster_name)
                 price = _item_price(
                     product,
                     self._settings.poster_main_spot_id,
@@ -196,7 +200,7 @@ class PosterMenuService:
                 photo_url = next(
                     (
                         storefront_photos[key]
-                        for key in storefront_photo_keys(product_id, name)
+                        for key in storefront_photo_keys(product_id, poster_name)
                         if key in storefront_photos
                     ),
                     None,
@@ -223,6 +227,7 @@ class PosterMenuService:
                         "measure": measure[0],
                         "measure_unit": measure[1],
                         "sort_order": _integer(product.get("sort_order"), 100),
+                        "modifier_groups": MODIFIER_GROUP_OVERRIDES.get(product_id, []),
                         "photo_url": photo_url,
                     }
                 )
@@ -232,7 +237,10 @@ class PosterMenuService:
                 menu_categories.append(
                     MenuCategory(
                         id=category_id,
-                        name=str(category.get("category_name") or "").strip(),
+                        name=CATEGORY_NAME_OVERRIDES.get(
+                            category_id,
+                            str(category.get("category_name") or "").strip(),
+                        ),
                         sort_order=_integer(category.get("sort_order"), 100),
                     )
                 )
@@ -251,6 +259,7 @@ class PosterMenuService:
                 measure=item["measure"],
                 measure_unit=item["measure_unit"],
                 sort_order=item["sort_order"],
+                modifier_groups=item["modifier_groups"],
                 images=[
                     MenuItemImage(
                         hash=image_hashes[item["photo_url"]],

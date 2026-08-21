@@ -1,5 +1,14 @@
 from app.adapters.storefront import normalize_product_name
-from app.services.menu_metadata import EXCLUDED_PRODUCT_IDS, menu_description, menu_measure
+from app.services.menu_metadata import (
+    CATEGORY_NAME_OVERRIDES,
+    DESCRIPTION_OVERRIDES,
+    EXCLUDED_PRODUCT_IDS,
+    ITEM_NAME_OVERRIDES,
+    MODIFIER_GROUP_OVERRIDES,
+    menu_description,
+    menu_measure,
+)
+from app.services.pizza_metadata import PIZZA_DESCRIPTIONS
 
 
 def test_user_selected_products_are_excluded():
@@ -33,3 +42,51 @@ def test_description_uses_main_ingredients_and_filters_technical_components():
 
 def test_storefront_name_normalization_handles_punctuation_and_yo():
     assert normalize_product_name("  Бургер «Тёплый» — XL ") == "бургер теплый xl"
+
+
+def test_manager_category_and_item_name_corrections():
+    assert CATEGORY_NAME_OVERRIDES == {
+        "3": "Пицца",
+        "5": "Закуски",
+        "7": "Дополнительно",
+        "8": "Хот-доги",
+        "20": "Детское меню",
+    }
+    assert ITEM_NAME_OVERRIDES["108"] == "Крылышки S"
+    assert ITEM_NAME_OVERRIDES["109"] == "Крылышки M"
+    assert ITEM_NAME_OVERRIDES["110"] == "Крылышки L"
+    assert ITEM_NAME_OVERRIDES["71"] == "Донер маленький куриный"
+
+
+def test_fuze_descriptions_include_all_current_flavors_and_volume():
+    for product_id, volume in (("56", "500 мл"), ("55", "1 л")):
+        description = DESCRIPTION_OVERRIDES[product_id]
+        assert volume in description
+        for flavor in ("лайм-мята", "лимон", "ягоды", "манго-ананас", "персик"):
+            assert flavor in description
+
+
+def test_combo_doner_uses_small_chicken_doner():
+    assert DESCRIPTION_OVERRIDES["161"].startswith("Донер маленький куриный")
+
+
+def test_kids_menu_uses_the_usual_apple_piko_tetrapak():
+    assert "вкусом яблока" in DESCRIPTION_OVERRIDES["18"]
+    assert "вкусом яблока" in DESCRIPTION_OVERRIDES["173"]
+    assert "вкусом яблока" in DESCRIPTION_OVERRIDES["174"]
+
+
+def test_sauce_requires_one_choice_from_three_options():
+    group = MODIFIER_GROUP_OVERRIDES["57"][0]
+    assert group["minSelectedModifiers"] == 1
+    assert group["maxSelectedModifiers"] == 1
+    assert [modifier["name"] for modifier in group["modifiers"]] == [
+        "Майонез",
+        "Кетчуп",
+        "Сырный соус",
+    ]
+
+
+def test_pizza_diameter_follows_manager_format_without_period():
+    assert all(value.endswith("(30 см)") for value in PIZZA_DESCRIPTIONS.values())
+    assert all(". (30 см)" not in value for value in PIZZA_DESCRIPTIONS.values())

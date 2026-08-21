@@ -133,7 +133,7 @@ async def test_poster_menu_service_maps_real_poster_fields():
     menu = await service.get_menu()
 
     assert menu.categories[0].id == "3"
-    assert menu.categories[0].name == "Пиццы"
+    assert menu.categories[0].name == "Пицца"
     assert len(menu.items) == 1
     assert menu.items[0].id == "125"
     assert menu.items[0].name == "Маргарита"

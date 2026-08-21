@@ -8,9 +8,7 @@ from app.adapters.storefront import (
 
 def test_storefront_aliases_match_current_site_names():
     assert "6 крылышек соус" in storefront_photo_keys("108", "Крылышки - 6шт")
-    assert "донер куриный 1 00 халапеньо" in storefront_photo_keys(
-        "131", "Донер стандартный"
-    )
+    assert "донер куриный 1 00 халапеньо" in storefront_photo_keys("131", "Донер стандартный")
 
 
 def test_direct_product_photo_has_priority_key():
@@ -25,9 +23,7 @@ def test_parse_homepage_photos():
     </div>
     """
 
-    assert parse_homepage_photos(page) == {
-        "6 крылышек соус": "https://cdn.example/wings.jpg"
-    }
+    assert parse_homepage_photos(page) == {"6 крылышек соус": "https://cdn.example/wings.jpg"}
 
 
 def test_parse_direct_product_photo():

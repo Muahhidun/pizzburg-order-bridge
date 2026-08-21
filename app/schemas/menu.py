@@ -18,6 +18,27 @@ class MenuItemImage(BaseModel):
     url: HttpUrl
 
 
+class MenuModifier(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    id: str = Field(max_length=64)
+    name: str
+    price: float = Field(ge=0)
+    min_amount: int = Field(default=0, alias="minAmount", ge=0, le=255)
+    max_amount: int = Field(default=1, alias="maxAmount", ge=1, le=255)
+
+
+class MenuModifierGroup(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    id: str = Field(max_length=64)
+    name: str
+    modifiers: list[MenuModifier] = Field(default_factory=list)
+    min_selected_modifiers: int = Field(alias="minSelectedModifiers", ge=0, le=255)
+    max_selected_modifiers: int = Field(alias="maxSelectedModifiers", ge=0, le=255)
+    sort_order: int = Field(default=100, alias="sortOrder")
+
+
 class MenuItem(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -30,6 +51,10 @@ class MenuItem(BaseModel):
     measure_unit: Literal["г", "мл", "g", "ml"] = Field(alias="measureUnit")
     is_catchweight: bool = Field(default=False, alias="isCatchweight")
     sort_order: int = Field(default=100, alias="sortOrder")
+    modifier_groups: list[MenuModifierGroup] = Field(
+        default_factory=list,
+        alias="modifierGroups",
+    )
     images: list[MenuItemImage] = Field(min_length=1)
 
 
