@@ -124,7 +124,39 @@ DESCRIPTION_OVERRIDES = {
     "110": "Состав: панировка, куриные крылышки, кетчуп (24 шт.).",
 }
 
+
+def _required_choice_group(product_id: str, names: tuple[str, ...]) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": f"{product_id}-choice",
+            "name": "На выбор",
+            "minSelectedModifiers": 1,
+            "maxSelectedModifiers": 1,
+            "sortOrder": 0,
+            "modifiers": [
+                {
+                    "id": f"{product_id}-choice-{index}",
+                    "name": name,
+                    "price": 0,
+                    "minAmount": 0,
+                    "maxAmount": 1,
+                }
+                for index, name in enumerate(names, start=1)
+            ],
+        }
+    ]
+
+
 MODIFIER_GROUP_OVERRIDES: dict[str, list[dict[str, Any]]] = {
+    "55": _required_choice_group(
+        "55",
+        ("Лайм-мята", "Лимон", "Ягоды", "Манго-ананас", "Персик"),
+    ),
+    "56": _required_choice_group(
+        "56",
+        ("Лайм-мята", "Лимон", "Ягоды", "Манго-ананас", "Персик"),
+    ),
+    "19": _required_choice_group("19", ("Яблоко", "Апельсин", "Компот")),
     "57": [
         {
             "id": "57-sauce-choice",
@@ -156,7 +188,7 @@ MODIFIER_GROUP_OVERRIDES: dict[str, list[dict[str, Any]]] = {
                 },
             ],
         }
-    ]
+    ],
 }
 
 _SKIP_INGREDIENTS = (
@@ -196,6 +228,7 @@ _INGREDIENT_REPLACEMENTS = (
     (r"соус барбекю.*", "соус барбекю"),
     (r"соус донер", "фирменный донерный соус"),
     (r"соус сырный.*", "сырный соус"),
+    (r"соус кичинез", "соус кетчунез"),
     (r"кетчуп.*", "кетчуп"),
     (r"халапеньо.*", "халапеньо"),
     (r"пепперони.*", "пепперони"),

@@ -66,6 +66,32 @@ def test_fuze_descriptions_include_all_current_flavors_and_volume():
             assert flavor in description
 
 
+def test_drink_tastes_are_required_modifier_choices():
+    assert MODIFIER_GROUP_OVERRIDES["55"][0]["name"] == "На выбор"
+    assert MODIFIER_GROUP_OVERRIDES["56"][0]["name"] == "На выбор"
+    assert MODIFIER_GROUP_OVERRIDES["19"][0]["name"] == "На выбор"
+    assert [modifier["name"] for modifier in MODIFIER_GROUP_OVERRIDES["55"][0]["modifiers"]] == [
+        "Лайм-мята",
+        "Лимон",
+        "Ягоды",
+        "Манго-ананас",
+        "Персик",
+    ]
+    assert [modifier["name"] for modifier in MODIFIER_GROUP_OVERRIDES["19"][0]["modifiers"]] == [
+        "Яблоко",
+        "Апельсин",
+        "Компот",
+    ]
+
+
+def test_ketchunez_spelling_is_normalized_in_ingredients():
+    product = {
+        "product_id": "sample",
+        "ingredients": [{"ingredient_name": "Соус кичинез"}],
+    }
+    assert menu_description(product) == "Состав: соус кетчунез."
+
+
 def test_combo_doner_uses_small_chicken_doner():
     assert DESCRIPTION_OVERRIDES["161"].startswith("Донер маленький куриный")
 

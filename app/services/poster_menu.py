@@ -4,6 +4,7 @@ import json
 from datetime import UTC, datetime
 from time import monotonic
 from typing import Any
+from urllib.parse import urlencode, urlparse
 
 from app.adapters.poster import PosterAPIError, PosterClient
 from app.adapters.storefront import StorefrontClient, storefront_photo_keys
@@ -21,6 +22,18 @@ from app.services.menu_metadata import (
 
 class PosterNotConfiguredError(Exception):
     pass
+
+
+PROXIED_POSTER_PHOTO_PRODUCT_IDS = {
+    "173",
+    "174",
+    "183",
+    "184",
+    "185",
+    "186",
+    "188",
+    "189",
+}
 
 
 def _number(value: Any, default: float = 0) -> float:
@@ -105,6 +118,22 @@ def _photo_url(poster_photo: Any) -> str | None:
     if value.startswith("/"):
         return f"https://joinposter.com{value}"
     return None
+
+
+def _menu_image_url(
+    product_id: str,
+    photo_url: str,
+    public_base_url: str,
+) -> str:
+    parsed = urlparse(photo_url)
+    if (
+        product_id not in PROXIED_POSTER_PHOTO_PRODUCT_IDS
+        or parsed.scheme != "https"
+        or parsed.hostname != "joinposter.com"
+    ):
+        return photo_url
+    query = urlencode({"source": photo_url})
+    return f"{public_base_url.rstrip('/')}/menu-images/{product_id}?{query}"
 
 
 class PosterMenuService:
@@ -207,6 +236,12 @@ class PosterMenuService:
                 )
                 if photo_url is None:
                     photo_url = _photo_url(product.get("photo_origin") or product.get("photo"))
+                if photo_url is not None:
+                    photo_url = _menu_image_url(
+                        product_id,
+                        photo_url,
+                        self._settings.public_base_url,
+                    )
                 if (
                     not product_id
                     or not name

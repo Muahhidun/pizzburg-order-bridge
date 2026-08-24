@@ -1,7 +1,7 @@
 from app.api.routes.menu import MENU_CONTENT_TYPE
 from app.core.config import Settings
 from app.schemas.menu import MenuCategory, MenuComposition, MenuItem, MenuItemImage
-from app.services.poster_menu import PosterMenuService
+from app.services.poster_menu import PosterMenuService, _menu_image_url
 
 
 async def test_menu_returns_poster_items_in_yandex_format(client, token, monkeypatch):
@@ -162,3 +162,13 @@ def test_all_pizza_descriptions_have_composition_and_diameter():
     assert len(PIZZA_DESCRIPTIONS) == 18
     assert all(value.startswith("Состав: ") for value in PIZZA_DESCRIPTIONS.values())
     assert all(value.endswith("(30 см)") for value in PIZZA_DESCRIPTIONS.values())
+
+
+def test_missing_yandex_photos_use_bridge_image_proxy():
+    source = "https://joinposter.com/upload/menu/product_188_original.jpeg"
+
+    result = _menu_image_url("188", source, "https://bridge.example/")
+
+    assert result.startswith("https://bridge.example/menu-images/188?")
+    assert "joinposter.com%2Fupload%2Fmenu%2Fproduct_188_original.jpeg" in result
+    assert _menu_image_url("125", source, "https://bridge.example") == source

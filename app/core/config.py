@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     poster_request_timeout_seconds: float = 10.0
     poster_menu_cache_seconds: int = 300
     storefront_menu_url: str = "https://pizzburg.kz/"
+    public_base_url: str = "https://pizzburg-order-bridge-production.up.railway.app"
 
     @field_validator("database_url", mode="before")
     @classmethod
