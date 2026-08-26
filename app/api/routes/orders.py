@@ -4,7 +4,13 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, require_access_token
-from app.schemas.order import OrderCreate, OrderResponse, OrderStatusResponse
+from app.schemas.order import (
+    OrderCreate,
+    OrderResponse,
+    OrderStatusResponse,
+    YandexOrderCreate,
+    YandexOrderCreateResponse,
+)
 from app.services.orders import DuplicateOrderConflictError, find_order, save_dry_run_order
 
 router = APIRouter(tags=["orders"], dependencies=[Depends(require_access_token)])
@@ -24,19 +30,38 @@ def _response(order, duplicate: bool = False) -> OrderResponse:
     )
 
 
-@router.post("/order", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/order",
+    response_model=OrderResponse | YandexOrderCreateResponse,
+    status_code=status.HTTP_200_OK,
+)
 async def create_order(
-    request: OrderCreate,
+    request: YandexOrderCreate | OrderCreate,
     response: Response,
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> OrderResponse:
+) -> OrderResponse | YandexOrderCreateResponse:
+    is_yandex_contract = isinstance(request, YandexOrderCreate)
+    if is_yandex_contract:
+        source_payload = request.model_dump(mode="json", exclude_none=True)
+        internal_request = request.to_internal_order()
+    else:
+        source_payload = None
+        internal_request = request
+
     try:
-        order, duplicate = await save_dry_run_order(session, request)
+        order, duplicate = await save_dry_run_order(
+            session,
+            internal_request,
+            source_payload=source_payload,
+        )
     except DuplicateOrderConflictError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Order ID already exists with different content",
         ) from exc
+    if is_yandex_contract:
+        response.status_code = status.HTTP_200_OK
+        return YandexOrderCreateResponse(orderId=order.id)
     if duplicate:
         response.status_code = status.HTTP_200_OK
     return _response(order, duplicate)

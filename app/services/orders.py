@@ -27,8 +27,13 @@ async def find_order(session: AsyncSession, external_order_id: str) -> Order | N
     return result.scalar_one_or_none()
 
 
-async def save_dry_run_order(session: AsyncSession, request: OrderCreate) -> tuple[Order, bool]:
-    payload = request.model_dump(mode="json")
+async def save_dry_run_order(
+    session: AsyncSession,
+    request: OrderCreate,
+    *,
+    source_payload: dict | None = None,
+) -> tuple[Order, bool]:
+    payload = source_payload or request.model_dump(mode="json")
     digest = _payload_hash(payload)
     now = datetime.now(UTC)
     order = Order(

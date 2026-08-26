@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Literal
 
@@ -25,7 +25,7 @@ class OrderItem(BaseModel):
 
     external_item_id: str = Field(min_length=1, max_length=128)
     name: str = Field(min_length=1, max_length=300)
-    quantity: int = Field(ge=1, le=100)
+    quantity: Decimal = Field(gt=0, le=100)
     unit_price: Decimal = Field(ge=0, decimal_places=2)
     modifiers: list[str] = Field(default_factory=list)
 
@@ -69,3 +69,96 @@ class OrderStatusResponse(BaseModel):
     status: str
     mode: str
     updated_at: datetime
+
+
+class YandexOrderModification(BaseModel):
+    """Modifier from the Yandex Eats order v2 contract."""
+
+    model_config = ConfigDict(extra="allow")
+
+    id: str = Field(min_length=1, max_length=128)
+    group_id: str | None = Field(default=None, max_length=128)
+    name: str = Field(min_length=1, max_length=300)
+    quantity: Decimal = Field(gt=0)
+    price: Decimal = Field(ge=0, decimal_places=2)
+
+
+class YandexOrderItem(BaseModel):
+    """Menu item from the Yandex Eats order v2 contract."""
+
+    model_config = ConfigDict(extra="allow")
+
+    id: str = Field(min_length=1, max_length=128)
+    name: str = Field(min_length=1, max_length=300)
+    quantity: Decimal = Field(gt=0)
+    price: Decimal = Field(ge=0, decimal_places=2)
+    modifications: list[YandexOrderModification] = Field(default_factory=list)
+    promos: list[dict | None] = Field(default_factory=list)
+    comboInfo: dict | None = None
+
+
+class YandexDeliveryInfo(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    clientName: str = Field(min_length=1, max_length=200)
+    phoneNumber: str | None = Field(default=None, max_length=64)
+    courierArrivementDate: datetime
+    additionalPhoneNumbers: list[str | None] = Field(default_factory=list)
+    realPhoneNumber: str | None = Field(default=None, max_length=64)
+    pickupCode: str | None = Field(default=None, max_length=64)
+    batches: list[str] = Field(default_factory=list)
+
+
+class YandexPaymentInfo(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    itemsCost: Decimal = Field(ge=0, decimal_places=2)
+    paymentType: Literal["CARD", "CASH"]
+
+
+class YandexOrderCreate(BaseModel):
+    """Official ``application/vnd.eats.order.v2+json`` delivery payload."""
+
+    model_config = ConfigDict(extra="allow")
+
+    platform: str | None = Field(default=None, max_length=32)
+    discriminator: Literal["yandex"]
+    eatsId: str = Field(min_length=1, max_length=128)
+    restaurantId: Literal["pizzburg-main"]
+    deliveryInfo: YandexDeliveryInfo
+    paymentInfo: YandexPaymentInfo
+    items: list[YandexOrderItem] = Field(min_length=1, max_length=200)
+    persons: int = Field(ge=0)
+    comment: str | None = Field(default=None, max_length=2000)
+    promos: list[dict | None] = Field(default_factory=list)
+
+    def to_internal_order(self) -> OrderCreate:
+        items = [
+            OrderItem(
+                external_item_id=item.id,
+                name=item.name,
+                quantity=item.quantity,
+                unit_price=item.price,
+                modifiers=[modifier.name for modifier in item.modifications],
+            )
+            for item in self.items
+        ]
+        calculated_total = sum((item.unit_price * item.quantity for item in items), Decimal("0"))
+        return OrderCreate(
+            provider="yandex",
+            external_order_id=self.eatsId,
+            restaurant_id=self.restaurantId,
+            customer=Customer(
+                name=self.deliveryInfo.clientName,
+                phone=self.deliveryInfo.phoneNumber,
+            ),
+            items=items,
+            total=calculated_total,
+            comment=self.comment,
+            created_at=datetime.now(UTC),
+        )
+
+
+class YandexOrderCreateResponse(BaseModel):
+    result: Literal["OK"] = "OK"
+    orderId: str
