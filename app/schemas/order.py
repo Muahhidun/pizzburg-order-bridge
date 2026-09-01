@@ -162,3 +162,17 @@ class YandexOrderCreate(BaseModel):
 class YandexOrderCreateResponse(BaseModel):
     result: Literal["OK"] = "OK"
     orderId: str
+
+
+class YandexOrderStatusResponse(BaseModel):
+    status: Literal[
+        "NEW",
+        "ACCEPTED_BY_RESTAURANT",
+        "COOKING",
+        "READY",
+        "TAKEN_BY_COURIER",
+        "DELIVERED",
+        "CANCELLED",
+    ]
+    comment: str | None = Field(default=None, max_length=500)
+    updatedAt: datetime | None = None

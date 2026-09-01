@@ -3,7 +3,7 @@ import json
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,9 +20,9 @@ def _payload_hash(payload: dict) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-async def find_order(session: AsyncSession, external_order_id: str) -> Order | None:
+async def find_order(session: AsyncSession, order_id: str) -> Order | None:
     result = await session.execute(
-        select(Order).where(Order.external_order_id == external_order_id)
+        select(Order).where(or_(Order.id == order_id, Order.external_order_id == order_id))
     )
     return result.scalar_one_or_none()
 

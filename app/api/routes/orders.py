@@ -1,6 +1,10 @@
+from datetime import UTC
+from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, require_access_token
@@ -10,10 +14,18 @@ from app.schemas.order import (
     OrderStatusResponse,
     YandexOrderCreate,
     YandexOrderCreateResponse,
+    YandexOrderStatusResponse,
 )
 from app.services.orders import DuplicateOrderConflictError, find_order, save_dry_run_order
 
 router = APIRouter(tags=["orders"], dependencies=[Depends(require_access_token)])
+
+
+def _yandex_json(model: YandexOrderCreate) -> dict:
+    return jsonable_encoder(
+        model.model_dump(mode="python", by_alias=True, exclude_none=True),
+        custom_encoder={Decimal: float},
+    )
 
 
 def _response(order, duplicate: bool = False) -> OrderResponse:
@@ -42,7 +54,7 @@ async def create_order(
 ) -> OrderResponse | YandexOrderCreateResponse:
     is_yandex_contract = isinstance(request, YandexOrderCreate)
     if is_yandex_contract:
-        source_payload = request.model_dump(mode="json", exclude_none=True)
+        source_payload = _yandex_json(request)
         internal_request = request.to_internal_order()
     else:
         source_payload = None
@@ -67,23 +79,53 @@ async def create_order(
     return _response(order, duplicate)
 
 
-@router.get("/order/{order_id}", response_model=OrderResponse)
+def _is_yandex_order_payload(payload: dict) -> bool:
+    return payload.get("discriminator") == "yandex" and "eatsId" in payload
+
+
+def _not_found_response() -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_404_NOT_FOUND,
+        content=[{"code": 404, "description": "Order not found"}],
+    )
+
+
+@router.get("/order/{order_id}", response_model=OrderResponse | YandexOrderCreate)
 async def get_order(
     order_id: str, session: Annotated[AsyncSession, Depends(get_session)]
-) -> OrderResponse:
+) -> OrderResponse | YandexOrderCreate | JSONResponse:
     order = await find_order(session, order_id)
     if order is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+        return _not_found_response()
+    if _is_yandex_order_payload(order.payload):
+        yandex_order = YandexOrderCreate.model_validate(order.payload)
+        content = _yandex_json(yandex_order)
+        return JSONResponse(
+            content=content,
+            media_type="application/vnd.eats.order.v2+json",
+        )
     return _response(order)
 
 
-@router.get("/order/{order_id}/status", response_model=OrderStatusResponse)
+@router.get(
+    "/order/{order_id}/status",
+    response_model=OrderStatusResponse | YandexOrderStatusResponse,
+)
 async def get_order_status(
     order_id: str, session: Annotated[AsyncSession, Depends(get_session)]
-) -> OrderStatusResponse:
+) -> OrderStatusResponse | YandexOrderStatusResponse | JSONResponse:
     order = await find_order(session, order_id)
     if order is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+        return _not_found_response()
+    if _is_yandex_order_payload(order.payload):
+        updated_at = order.updated_at
+        if updated_at.tzinfo is None:
+            updated_at = updated_at.replace(tzinfo=UTC)
+        return YandexOrderStatusResponse(
+            status="NEW",
+            comment="Заказ принят в тестовом режиме",
+            updatedAt=updated_at,
+        )
     return OrderStatusResponse(
         external_order_id=order.external_order_id,
         status=order.status,

@@ -78,13 +78,33 @@ async def test_accepts_official_yandex_v2_order_contract(client, token):
 
     created = await client.post("/order", headers=headers, json=payload)
     repeated = await client.post("/order", headers=headers, json=payload)
-    fetched = await client.get("/order/260826-8248177", headers=headers)
 
     assert created.status_code == 200
     assert created.json()["result"] == "OK"
     assert created.json()["orderId"]
     assert repeated.status_code == 200
     assert repeated.json() == created.json()
+    partner_order_id = created.json()["orderId"]
+    fetched = await client.get(f"/order/{partner_order_id}", headers=headers)
+    order_status = await client.get(
+        f"/order/{partner_order_id}/status",
+        headers=headers,
+    )
+
     assert fetched.status_code == 200
-    assert fetched.json()["external_order_id"] == "260826-8248177"
-    assert fetched.json()["status"] == "accepted_dry_run"
+    assert fetched.headers["content-type"].startswith("application/vnd.eats.order.v2+json")
+    assert fetched.json()["eatsId"] == "260826-8248177"
+    assert fetched.json()["items"][0]["price"] == 1890
+    assert order_status.status_code == 200
+    assert order_status.json()["status"] == "NEW"
+    assert order_status.json()["updatedAt"]
+
+
+async def test_yandex_order_not_found_uses_error_array(client, token):
+    response = await client.get(
+        "/order/missing-yandex-order/status",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == [{"code": 404, "description": "Order not found"}]
