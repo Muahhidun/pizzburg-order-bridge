@@ -8,7 +8,7 @@ from app.main import create_app
 
 
 @pytest.fixture
-async def client(tmp_path) -> AsyncIterator[AsyncClient]:
+def app(tmp_path):
     settings = Settings(
         environment="test",
         database_url=f"sqlite+aiosqlite:///{tmp_path / 'test.sqlite3'}",
@@ -17,7 +17,11 @@ async def client(tmp_path) -> AsyncIterator[AsyncClient]:
         oauth_client_secret="test-secret",
         jwt_secret="test-jwt-secret-that-is-long-enough-for-tests",
     )
-    app = create_app(settings)
+    return create_app(settings)
+
+
+@pytest.fixture
+async def client(app) -> AsyncIterator[AsyncClient]:
     async with app.router.lifespan_context(app):
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"

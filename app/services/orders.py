@@ -66,3 +66,38 @@ async def save_dry_run_order(
 
     await session.refresh(order)
     return order, False
+
+
+async def mark_poster_forwarding_started(session: AsyncSession, order: Order) -> None:
+    order.forwarding_status = "in_progress"
+    order.forwarding_error = None
+    order.mode = "poster-test"
+    order.updated_at = datetime.now(UTC)
+    await session.commit()
+
+
+async def mark_poster_forwarding_succeeded(
+    session: AsyncSession,
+    order: Order,
+    poster_order_id: str,
+) -> None:
+    order.forwarding_status = "sent"
+    order.poster_order_id = poster_order_id
+    order.forwarding_error = None
+    order.status = "sent_to_poster"
+    order.mode = "poster"
+    order.updated_at = datetime.now(UTC)
+    await session.commit()
+
+
+async def mark_poster_forwarding_failed(
+    session: AsyncSession,
+    order: Order,
+    error: str,
+) -> None:
+    order.forwarding_status = "failed"
+    order.forwarding_error = error[:1000]
+    order.status = "poster_failed"
+    order.mode = "poster-test"
+    order.updated_at = datetime.now(UTC)
+    await session.commit()

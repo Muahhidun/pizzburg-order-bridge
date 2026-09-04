@@ -108,3 +108,81 @@ async def test_yandex_order_not_found_uses_error_array(client, token):
 
     assert response.status_code == 404
     assert response.json() == [{"code": 404, "description": "Order not found"}]
+
+
+class FakePosterOrderService:
+    enabled = True
+
+    def __init__(self, *, error: Exception | None = None) -> None:
+        self.calls = 0
+        self.error = error
+
+    async def create_order(self, request) -> str:
+        self.calls += 1
+        if self.error is not None:
+            raise self.error
+        return "poster-order-42"
+
+
+def _yandex_payload(order_id: str) -> dict:
+    return {
+        "discriminator": "yandex",
+        "eatsId": order_id,
+        "items": [
+            {
+                "id": "142",
+                "quantity": 1,
+                "price": 1890,
+                "modifications": [],
+                "promos": [],
+                "name": "BBQ Бургер",
+            }
+        ],
+        "promos": [],
+        "restaurantId": "pizzburg-main",
+        "deliveryInfo": {
+            "courierArrivementDate": "2026-09-04T18:00:00+05:00",
+            "clientName": "Яндекс.Еда",
+            "phoneNumber": "+77273470693",
+        },
+        "paymentInfo": {"itemsCost": 1890, "paymentType": "CARD"},
+        "persons": 1,
+    }
+
+
+async def test_forwards_new_yandex_order_to_poster_once(client, token, app):
+    from app.services.orders import find_order
+
+    poster = FakePosterOrderService()
+    app.state.poster_order_service = poster
+    headers = {"Authorization": f"Bearer {token}"}
+    payload = _yandex_payload("yandex-poster-test-1")
+
+    first = await client.post("/order", headers=headers, json=payload)
+    second = await client.post("/order", headers=headers, json=payload)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert poster.calls == 1
+    async with app.state.session_factory() as session:
+        order = await find_order(session, "yandex-poster-test-1")
+        assert order is not None
+        assert order.forwarding_status == "sent"
+        assert order.poster_order_id == "poster-order-42"
+        assert order.mode == "poster"
+
+
+async def test_does_not_retry_ambiguous_poster_failure(client, token, app):
+    from app.adapters.poster import PosterAPIError
+
+    poster = FakePosterOrderService(error=PosterAPIError("Poster request failed"))
+    app.state.poster_order_service = poster
+    headers = {"Authorization": f"Bearer {token}"}
+    payload = _yandex_payload("yandex-poster-test-2")
+
+    first = await client.post("/order", headers=headers, json=payload)
+    second = await client.post("/order", headers=headers, json=payload)
+
+    assert first.status_code == 502
+    assert second.status_code == 503
+    assert poster.calls == 1

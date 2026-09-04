@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     poster_menu_category_id: str = "3"
     poster_main_spot_id: str = "1"
     poster_menu_price_source: str = "Wolt"
+    poster_order_forwarding_enabled: bool = False
+    poster_currency: str = "KZT"
     poster_request_timeout_seconds: float = 10.0
     poster_menu_cache_seconds: int = 300
     storefront_menu_url: str = "https://pizzburg.kz/"

@@ -39,11 +39,34 @@ class PosterClient:
             raise PosterAPIError(f"Poster {method} returned an unexpected response")
         return result
 
+    async def _post(self, method: str, body: dict[str, Any]) -> dict[str, Any]:
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
+                response = await client.post(
+                    f"{self._base_url}/{method}",
+                    params={"token": self._token},
+                    json=body,
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            raise PosterAPIError(f"Poster {method} request failed") from exc
+
+        if not isinstance(payload, dict) or payload.get("error"):
+            raise PosterAPIError(f"Poster {method} returned an API error")
+        result = payload.get("response")
+        if not isinstance(result, dict):
+            raise PosterAPIError(f"Poster {method} returned an unexpected response")
+        return result
+
     async def get_categories(self) -> list[dict[str, Any]]:
         return await self._call("menu.getCategories")
 
     async def get_products(self) -> list[dict[str, Any]]:
         return await self._call("menu.getProducts")
+
+    async def create_incoming_order(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._post("incomingOrders.createIncomingOrder", body)
 
     async def get_image_hashes(self, urls: list[str]) -> dict[str, str]:
         async def download(client: httpx.AsyncClient, url: str) -> tuple[str, str]:

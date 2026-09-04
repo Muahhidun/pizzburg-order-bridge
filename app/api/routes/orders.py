@@ -2,11 +2,12 @@ from datetime import UTC
 from decimal import Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.adapters.poster import PosterAPIError
 from app.api.dependencies import get_session, require_access_token
 from app.schemas.order import (
     OrderCreate,
@@ -16,7 +17,15 @@ from app.schemas.order import (
     YandexOrderCreateResponse,
     YandexOrderStatusResponse,
 )
-from app.services.orders import DuplicateOrderConflictError, find_order, save_dry_run_order
+from app.services.orders import (
+    DuplicateOrderConflictError,
+    find_order,
+    mark_poster_forwarding_failed,
+    mark_poster_forwarding_started,
+    mark_poster_forwarding_succeeded,
+    save_dry_run_order,
+)
+from app.services.poster_orders import PosterOrderNotConfiguredError, PosterOrderService
 
 router = APIRouter(tags=["orders"], dependencies=[Depends(require_access_token)])
 
@@ -25,6 +34,17 @@ def _yandex_json(model: YandexOrderCreate) -> dict:
     return jsonable_encoder(
         model.model_dump(mode="python", by_alias=True, exclude_none=True),
         custom_encoder={Decimal: float},
+    )
+
+
+def get_poster_order_service(request: Request) -> PosterOrderService:
+    return request.app.state.poster_order_service
+
+
+def _yandex_error(status_code: int, code: int, description: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content=[{"code": code, "description": description}],
     )
 
 
@@ -51,7 +71,8 @@ async def create_order(
     request: YandexOrderCreate | OrderCreate,
     response: Response,
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> OrderResponse | YandexOrderCreateResponse:
+    poster_orders: Annotated[PosterOrderService, Depends(get_poster_order_service)],
+) -> OrderResponse | YandexOrderCreateResponse | JSONResponse:
     is_yandex_contract = isinstance(request, YandexOrderCreate)
     if is_yandex_contract:
         source_payload = _yandex_json(request)
@@ -72,6 +93,29 @@ async def create_order(
             detail="Order ID already exists with different content",
         ) from exc
     if is_yandex_contract:
+        if poster_orders.enabled:
+            if duplicate and order.forwarding_status != "sent":
+                return _yandex_error(
+                    status.HTTP_503_SERVICE_UNAVAILABLE,
+                    503,
+                    "Order forwarding requires manual verification",
+                )
+            if not duplicate:
+                await mark_poster_forwarding_started(session, order)
+                try:
+                    poster_order_id = await poster_orders.create_order(request)
+                except (PosterAPIError, PosterOrderNotConfiguredError) as exc:
+                    await mark_poster_forwarding_failed(session, order, str(exc))
+                    return _yandex_error(
+                        status.HTTP_502_BAD_GATEWAY,
+                        502,
+                        "Poster temporarily rejected the order",
+                    )
+                await mark_poster_forwarding_succeeded(
+                    session,
+                    order,
+                    poster_order_id,
+                )
         response.status_code = status.HTTP_200_OK
         return YandexOrderCreateResponse(orderId=order.id)
     if duplicate:
