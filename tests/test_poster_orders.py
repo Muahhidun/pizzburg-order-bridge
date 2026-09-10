@@ -81,7 +81,9 @@ async def test_builds_and_creates_poster_incoming_order():
         {"product_id": 56, "count": 1, "price": 85000},
         {"product_id": 142, "count": 2, "price": 52000},
     ]
-    assert client.payload["payment"] == {"type": 1, "sum": 189000, "currency": "KZT"}
+    # Yandex settles with the restaurant separately, so the incoming order must
+    # remain unpaid until the cashier closes it with the Yandex payment method.
+    assert "payment" not in client.payload
     assert "Fuze Tea S: Лайм-мята × 1" in client.payload["comment"]
     assert "Не готовить — тест" in client.payload["comment"]
 

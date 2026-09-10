@@ -83,12 +83,6 @@ class PosterOrderService:
                 for item in order.items
             ],
         }
-        if order.paymentInfo.paymentType == "CARD":
-            payload["payment"] = {
-                "type": 1,
-                "sum": _minor_units(order.paymentInfo.itemsCost),
-                "currency": self._settings.poster_currency,
-            }
         return payload
 
     async def create_order(self, order: YandexOrderCreate) -> str:
