@@ -18,6 +18,7 @@ from app.services.menu_metadata import (
     menu_description,
     menu_measure,
 )
+from app.services.menu_presentation import apply_menu_order, photo_overrides
 
 
 class PosterNotConfiguredError(Exception):
@@ -226,7 +227,7 @@ class PosterMenuService:
                 )
                 measure = menu_measure(product)
                 description = menu_description(product)
-                photo_url = next(
+                photo_url = photo_overrides().get(product_id) or next(
                     (
                         storefront_photos[key]
                         for key in storefront_photo_keys(product_id, poster_name)
@@ -304,6 +305,7 @@ class PosterMenuService:
             )
             for item in prepared_items
         ]
+        menu_categories, menu_items = apply_menu_order(menu_categories, menu_items)
         content = {
             "categories": [
                 category.model_dump(mode="json", by_alias=True) for category in menu_categories

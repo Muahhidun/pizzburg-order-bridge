@@ -122,7 +122,8 @@ class FakeStorefrontClient:
         return {}
 
 
-async def test_poster_menu_service_maps_real_poster_fields():
+async def test_poster_menu_service_maps_real_poster_fields(monkeypatch):
+    monkeypatch.setattr("app.services.poster_menu.photo_overrides", lambda: {})
     settings = Settings(poster_menu_category_id="3", poster_main_spot_id="1")
     service = PosterMenuService(
         settings,
@@ -144,6 +145,25 @@ async def test_poster_menu_service_maps_real_poster_fields():
     assert menu.items[0].description.endswith("(30 см)")
     assert menu.items[0].images[0].hash == "c" * 40
     assert str(menu.items[0].images[0].url) == ("https://joinposter.com/upload/pizza-125.jpeg")
+
+
+async def test_approved_photo_takes_priority_over_both_old_sources(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.poster_menu.photo_overrides",
+        lambda: {"125": "https://example.com/approved-margarita.webp"},
+    )
+
+    class OldStorefront:
+        async def get_product_photos(self):
+            return {"poster-product:125": "https://example.com/old-margarita.jpg"}
+
+    service = PosterMenuService(
+        Settings(), client=FakePosterClient(), storefront_client=OldStorefront()
+    )
+    menu = await service.get_menu()
+    assert str(menu.items[0].images[0].url) == "https://example.com/approved-margarita.webp"
+    assert menu.items[0].id == "125"
+    assert menu.items[0].price == 2650
 
 
 def test_meat_pizza_description_names_meat_types():
