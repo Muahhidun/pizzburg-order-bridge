@@ -1,6 +1,22 @@
+from pathlib import Path
+
 import httpx
 
 from app.api.routes import menu_images
+
+HAM_BURGER_PHOTO = Path(menu_images.__file__).resolve().parents[2] / "assets" / "ham-burger.jpg"
+
+
+async def test_missing_ham_burger_photo_is_available_without_external_download(client, monkeypatch):
+    async def unexpected_download(url):
+        raise AssertionError("Bundled photo must not depend on Poster")
+
+    monkeypatch.setattr(menu_images, "_download_image", unexpected_download)
+    response = await client.get("/menu-images/ham-burger.jpg")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/jpeg"
+    assert response.content == HAM_BURGER_PHOTO.read_bytes()
+    assert response.content.startswith(b"\xff\xd8")
 
 
 async def test_menu_image_proxy_returns_joinposter_image(client, monkeypatch):

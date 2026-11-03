@@ -101,8 +101,37 @@ def test_approved_photos_are_public_assets_and_unknown_items_have_fallback():
     assert all(
         urlparse(url).scheme == "https"
         and urlparse(url).hostname
-        in {"pub-7710648eb70b40f0bcf08a208128f925.r2.dev", "joinposter.com"}
+        in {
+            "pub-7710648eb70b40f0bcf08a208128f925.r2.dev",
+            "pizzburg-order-bridge-production.up.railway.app",
+        }
         and not urlparse(url).query
         for url in photos.values()
     )
     assert "unknown-future-product" not in photos
+
+
+def test_only_combos_drinks_and_missing_ham_burger_have_photo_overrides():
+    assert set(photo_overrides()) == {
+        "161",
+        "162",
+        "163",
+        "164",
+        "150",
+        "187",
+        "115",
+        "13",
+        "59",
+        "14",
+        "15",
+        "16",
+        "17",
+        "18",
+        "19",
+        "21",
+        "20",
+        "23",
+        "22",
+        "56",
+        "55",
+    }

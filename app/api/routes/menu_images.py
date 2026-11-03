@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Annotated
 from urllib.parse import urlparse
 
@@ -5,6 +6,17 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query, Response, status
 
 router = APIRouter(tags=["menu images"])
+
+
+@router.get("/menu-images/ham-burger.jpg", include_in_schema=False)
+def get_ham_burger_photo() -> Response:
+    """Existing approved product photo in a Yandex-compatible 1600×1200 frame."""
+    photo = Path(__file__).resolve().parents[2] / "assets" / "ham-burger.jpg"
+    return Response(
+        content=photo.read_bytes(),
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 async def _download_image(source: str) -> httpx.Response:
